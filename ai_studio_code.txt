@@ -1,0 +1,2176 @@
+/**
+ * makeitup — Premium Menswear E-Commerce
+ * "Make it yours. Make it up."
+ */
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  ShoppingBag,
+  Heart,
+  Search,
+  Menu,
+  X,
+  Star,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  Truck,
+  RotateCcw,
+  Sparkles,
+  CheckCircle2,
+  Package,
+  Clock,
+  MessageCircle,
+  SlidersHorizontal,
+  Mail,
+  ExternalLink,
+  Info,
+  MapPin,
+  Check
+} from 'lucide-react';
+import { PRODUCTS, CATEGORIES_NAV, INSTAGRAM_POSTS, REVIEWS } from './data/products';
+import { Product, CartItem, Category, OrderCustomerDetails, OrderRecord } from './types';
+
+const ORDER_TARGET_EMAIL = "josephamalraj.co@gmail.com";
+const WHATSAPP_PHONE = "919876543210";
+
+// Pre-seeded sample order so Track Order works right away out of the box
+const SAMPLE_ORDER: OrderRecord = {
+  orderId: "MIU-849201",
+  orderDate: "05 Oct 2026, 06:45 PM",
+  status: "Shipped",
+  estimatedDelivery: "08 Oct 2026",
+  customer: {
+    name: "Vikram Singhania",
+    phone: "9876543210",
+    email: "vikram.singh@gmail.com",
+    address: "B-402, Royal Palms, Bandra West",
+    city: "Mumbai",
+    pincode: "400050",
+    notes: "Leave with security if not answering",
+    paymentMethod: "UPI"
+  },
+  items: [
+    {
+      product: PRODUCTS[2], // Festive Gold Kurta
+      selectedSize: "L",
+      quantity: 1
+    },
+    {
+      product: PRODUCTS[10], // Leather Belt
+      selectedSize: "Free Size (30-40)",
+      quantity: 1
+    }
+  ],
+  subtotal: 3098,
+  discount: 310,
+  shipping: 0,
+  total: 2788,
+  courierName: "Blue Dart Express",
+  trackingNumber: "BD-8893049102"
+};
+
+export default function App() {
+  // Navigation & Modal states
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isTrackOrderOpen, setIsTrackOrderOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  // Search & Catalog Filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<Category>('All');
+  const [sortBy, setSortBy] = useState<'featured' | 'price-low' | 'price-high' | 'rating'>('featured');
+
+  // Track Order query state
+  const [trackingInputId, setTrackingInputId] = useState('');
+  const [trackedOrder, setTrackedOrder] = useState<OrderRecord | null>(null);
+  const [trackingSearchError, setTrackingSearchError] = useState('');
+
+  // Cart & Wishlist persistence (localStorage)
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('makeitup_cart');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [wishlist, setWishlist] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem('makeitup_wishlist');
+      return saved ? JSON.parse(saved) : [1, 3];
+    } catch {
+      return [1, 3];
+    }
+  });
+
+  // Orders stored in localStorage
+  const [savedOrders, setSavedOrders] = useState<OrderRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('makeitup_orders');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return [SAMPLE_ORDER];
+    } catch {
+      return [SAMPLE_ORDER];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('makeitup_cart', JSON.stringify(cart));
+  }, [cart]);
+
+  useEffect(() => {
+    localStorage.setItem('makeitup_wishlist', JSON.stringify(wishlist));
+  }, [wishlist]);
+
+  useEffect(() => {
+    localStorage.setItem('makeitup_orders', JSON.stringify(savedOrders));
+  }, [savedOrders]);
+
+  // Hero Carousel Slides
+  const [heroSlide, setHeroSlide] = useState(0);
+  const heroSlides = [
+    {
+      subtitle: "The Royal Festive Collection 2026",
+      title: "Festive Essentials – Celebrate in Style",
+      accent: "Handcrafted Zari & Raw Silk",
+      bg: "https://images.unsplash.com/photo-1617137984095-74e4e5e3613f?w=1600&q=80",
+      cta: "EXPLORE FESTIVE EDIT",
+      category: "Ethnic" as Category
+    },
+    {
+      subtitle: "New Drop • Limited Run",
+      title: "Artisanal Graphic & Vintage Shirts",
+      accent: "Cuban Collars & Heritage Weaves",
+      bg: "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=1600&q=80",
+      cta: "SHOP SHIRTS",
+      category: "Shirt" as Category
+    },
+    {
+      subtitle: "Editorial Sartorial Tailoring",
+      title: "Understated Elegance for Everyday",
+      accent: "French Linen & Pleated Trousers",
+      bg: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=1600&q=80",
+      cta: "VIEW ALL MENSWEAR",
+      category: "All" as Category
+    }
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setHeroSlide((prev) => (prev + 1) % heroSlides.length);
+    }, 5500);
+    return () => clearInterval(timer);
+  }, [heroSlides.length]);
+
+  // Coupon state
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
+  const [couponError, setCouponError] = useState('');
+
+  // Checkout Form
+  const [checkoutForm, setCheckoutForm] = useState<OrderCustomerDetails>({
+    name: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
+    pincode: '',
+    notes: '',
+    paymentMethod: 'COD'
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+  const [placedOrder, setPlacedOrder] = useState<OrderRecord | null>(null);
+
+  // Newsletter
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
+
+  // Cart Calculations
+  const cartSubtotal = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  }, [cart]);
+
+  const discountAmount = useMemo(() => {
+    if (!appliedCoupon) return 0;
+    return Math.round((cartSubtotal * appliedCoupon.discountPercent) / 100);
+  }, [cartSubtotal, appliedCoupon]);
+
+  const shippingFee = cartSubtotal >= 1999 || cartSubtotal === 0 ? 0 : 99;
+  const cartTotal = Math.max(0, cartSubtotal - discountAmount + shippingFee);
+  const totalCartItems = cart.reduce((count, item) => count + item.quantity, 0);
+
+  // Wishlist actions
+  const toggleWishlist = (productId: number, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setWishlist((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+  };
+
+  // Cart actions
+  const addToCart = (product: Product, size?: string) => {
+    const chosenSize = size || product.sizes[0];
+    setCart((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id && item.selectedSize === chosenSize);
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === product.id && item.selectedSize === chosenSize
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      }
+      return [...prev, { product, selectedSize: chosenSize, quantity: 1 }];
+    });
+    setIsCartOpen(true);
+  };
+
+  const updateCartQuantity = (productId: number, size: string, delta: number) => {
+    setCart((prev) =>
+      prev
+        .map((item) => {
+          if (item.product.id === productId && item.selectedSize === size) {
+            const newQty = item.quantity + delta;
+            return newQty > 0 ? { ...item, quantity: newQty } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as CartItem[]
+    );
+  };
+
+  const removeCartItem = (productId: number, size: string) => {
+    setCart((prev) => prev.filter((item) => !(item.product.id === productId && item.selectedSize === size)));
+  };
+
+  const applyCoupon = () => {
+    setCouponError('');
+    const code = couponCode.trim().toUpperCase();
+    if (code === 'MAKEITUP10' || code === 'WELCOME10') {
+      setAppliedCoupon({ code, discountPercent: 10 });
+    } else if (code === 'FESTIVE15') {
+      setAppliedCoupon({ code, discountPercent: 15 });
+    } else {
+      setCouponError('Invalid coupon. Try MAKEITUP10 for 10% off.');
+    }
+  };
+
+  // Filter & Search
+  const filteredProducts = useMemo(() => {
+    let list = [...PRODUCTS];
+
+    if (selectedCategory !== 'All') {
+      list = list.filter((p) => p.category === selectedCategory);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.category.toLowerCase().includes(q) ||
+          p.description.toLowerCase().includes(q)
+      );
+    }
+
+    if (sortBy === 'price-low') {
+      list.sort((a, b) => a.price - b.price);
+    } else if (sortBy === 'price-high') {
+      list.sort((a, b) => b.price - a.price);
+    } else if (sortBy === 'rating') {
+      list.sort((a, b) => b.rating - a.rating);
+    }
+
+    return list;
+  }, [selectedCategory, searchQuery, sortBy]);
+
+  // Validation
+  const validateCheckout = () => {
+    const errors: Record<string, string> = {};
+    if (!checkoutForm.name.trim()) errors.name = 'Full name is required';
+    if (!checkoutForm.phone.trim() || !/^\d{10}$/.test(checkoutForm.phone.replace(/\D/g, ''))) {
+      errors.phone = 'Valid 10-digit mobile number required';
+    }
+    if (!checkoutForm.email.trim() || !/\S+@\S+\.\S+/.test(checkoutForm.email)) {
+      errors.email = 'Valid email address required';
+    }
+    if (!checkoutForm.address.trim()) errors.address = 'Delivery address is required';
+    if (!checkoutForm.city.trim()) errors.city = 'City is required';
+    if (!checkoutForm.pincode.trim() || !/^\d{6}$/.test(checkoutForm.pincode.replace(/\D/g, ''))) {
+      errors.pincode = 'Valid 6-digit postal pincode required';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Place Order & Dispatch Email
+  const handlePlaceOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateCheckout()) return;
+    if (cart.length === 0) return;
+
+    setIsSubmittingOrder(true);
+
+    const generatedOrderId = `MIU-${Math.floor(100000 + Math.random() * 900000)}`;
+    const now = new Date();
+    const formattedDate = now.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    }) + ', ' + now.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const estDate = new Date();
+    estDate.setDate(estDate.getDate() + 4);
+    const formattedEst = estDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    const newOrder: OrderRecord = {
+      orderId: generatedOrderId,
+      orderDate: formattedDate,
+      status: 'Confirmed',
+      estimatedDelivery: formattedEst,
+      customer: checkoutForm,
+      items: [...cart],
+      subtotal: cartSubtotal,
+      discount: discountAmount,
+      shipping: shippingFee,
+      total: cartTotal,
+      courierName: "Blue Dart Express",
+      trackingNumber: `BD-${Math.floor(1000000000 + Math.random() * 9000000000)}`
+    };
+
+    setSavedOrders((prev) => [newOrder, ...prev]);
+
+    const itemsFormattedText = newOrder.items
+      .map((i, idx) => `${idx + 1}. ${i.product.name} (Size: ${i.selectedSize}) x ${i.quantity} = ₹${i.product.price * i.quantity}`)
+      .join('\n');
+
+    const emailPayload = {
+      _subject: `New makeitup Order #${newOrder.orderId} from ${newOrder.customer.name}`,
+      order_id: newOrder.orderId,
+      order_date: newOrder.orderDate,
+      customer_name: newOrder.customer.name,
+      customer_email: newOrder.customer.email,
+      customer_phone: newOrder.customer.phone,
+      delivery_address: `${newOrder.customer.address}, ${newOrder.customer.city} - ${newOrder.customer.pincode}`,
+      customer_notes: newOrder.customer.notes || 'None',
+      payment_method: newOrder.customer.paymentMethod,
+      order_items: itemsFormattedText,
+      subtotal: `₹${newOrder.subtotal}`,
+      discount: `₹${newOrder.discount}`,
+      shipping: `₹${newOrder.shipping}`,
+      grand_total: `₹${newOrder.total}`
+    };
+
+    try {
+      await fetch(`https://formsubmit.co/ajax/${ORDER_TARGET_EMAIL}`, {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(emailPayload)
+      });
+    } catch (err) {
+      console.warn('Email dispatch handled safely:', err);
+    } finally {
+      setIsSubmittingOrder(false);
+      setPlacedOrder(newOrder);
+      setCart([]);
+      setIsCheckoutOpen(false);
+    }
+  };
+
+  // Track Order query
+  const handleSearchOrder = (idToSearch?: string) => {
+    const query = (idToSearch || trackingInputId).trim().toUpperCase();
+    if (!query) {
+      setTrackingSearchError('Please enter an Order ID');
+      setTrackedOrder(null);
+      return;
+    }
+
+    setTrackingSearchError('');
+    const found = savedOrders.find((o) => o.orderId.toUpperCase() === query);
+
+    if (found) {
+      setTrackedOrder(found);
+      setTrackingInputId(found.orderId);
+    } else {
+      setTrackedOrder(null);
+      setTrackingSearchError(`No order found with ID "${query}". Please check your order confirmation.`);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FAF7F0] text-[#111111] flex flex-col font-sans">
+      
+      {/* Top Banner Notice */}
+      <div className="bg-[#111111] text-[#E0A800] text-xs font-medium py-2 px-4 text-center tracking-wider uppercase flex items-center justify-center gap-2">
+        <Sparkles size={14} className="text-[#E0A800]" />
+        <span>Festive Season Sale: Use code <strong className="underline text-white">MAKEITUP10</strong> for 10% OFF • Free Shipping on orders over ₹1,999</span>
+      </div>
+
+      {/* STICKY HEADER */}
+      <header className="sticky top-0 z-40 bg-[#FAF7F0]/95 backdrop-blur-md border-b border-[#E8E2D5] transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+          
+          {/* Left: Mobile Menu & Desktop Nav */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 -ml-2 rounded-lg text-[#111111] hover:bg-black/5 md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
+
+            <nav className="hidden md:flex items-center gap-6 text-sm font-medium tracking-wide">
+              <button
+                onClick={() => { setSelectedCategory('All'); window.scrollTo({ top: 600, behavior: 'smooth' }); }}
+                className="hover:text-[#E0A800] transition-colors uppercase text-xs tracking-widest font-semibold"
+              >
+                Collection
+              </button>
+              <button
+                onClick={() => { setSelectedCategory('Shirt'); window.scrollTo({ top: 600, behavior: 'smooth' }); }}
+                className="hover:text-[#E0A800] transition-colors uppercase text-xs tracking-widest"
+              >
+                Shirts
+              </button>
+              <button
+                onClick={() => { setSelectedCategory('Ethnic'); window.scrollTo({ top: 600, behavior: 'smooth' }); }}
+                className="hover:text-[#E0A800] transition-colors uppercase text-xs tracking-widest text-[#E0A800] font-bold"
+              >
+                Festive Kurta ✨
+              </button>
+              <button
+                onClick={() => { setSelectedCategory('Trousers'); window.scrollTo({ top: 600, behavior: 'smooth' }); }}
+                className="hover:text-[#E0A800] transition-colors uppercase text-xs tracking-widest"
+              >
+                Trousers
+              </button>
+              <button
+                onClick={() => { setSelectedCategory('Accessories'); window.scrollTo({ top: 600, behavior: 'smooth' }); }}
+                className="hover:text-[#E0A800] transition-colors uppercase text-xs tracking-widest"
+              >
+                Accessories
+              </button>
+              <button
+                onClick={() => {
+                  setIsTrackOrderOpen(true);
+                  if (savedOrders.length > 0 && !trackedOrder) {
+                    setTrackedOrder(savedOrders[0]);
+                    setTrackingInputId(savedOrders[0].orderId);
+                  }
+                }}
+                className="hover:text-[#E0A800] transition-colors uppercase text-xs tracking-widest font-bold flex items-center gap-1.5 text-black bg-[#FAF7F0] px-2.5 py-1 rounded-full border border-black/15"
+              >
+                <Truck size={14} className="text-[#E0A800]" /> Track Order
+              </button>
+            </nav>
+          </div>
+
+          {/* Center: Brand Wordmark */}
+          <div className="text-center cursor-pointer" onClick={() => { setSelectedCategory('All'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+            <span className="font-serif text-2xl sm:text-3xl font-extrabold tracking-tight text-[#111111]">
+              makeitup
+            </span>
+            <span className="hidden sm:block text-[9px] tracking-[0.25em] uppercase text-[#777] -mt-1 font-sans">
+              Make it yours. Make it up.
+            </span>
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => {
+                setIsTrackOrderOpen(true);
+                if (savedOrders.length > 0 && !trackedOrder) {
+                  setTrackedOrder(savedOrders[0]);
+                  setTrackingInputId(savedOrders[0].orderId);
+                }
+              }}
+              className="p-2 rounded-full text-[#111111] hover:bg-black/5 md:hidden"
+              aria-label="Track Order"
+            >
+              <Truck size={20} className="text-black" />
+            </button>
+
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="p-2 rounded-full text-[#111111] hover:bg-black/5 transition-colors"
+              aria-label="Search items"
+            >
+              <Search size={20} />
+            </button>
+
+            <button
+              onClick={() => setIsWishlistOpen(true)}
+              className="p-2 rounded-full text-[#111111] hover:bg-black/5 transition-colors relative"
+              aria-label="Wishlist"
+            >
+              <Heart size={20} className={wishlist.length > 0 ? "fill-[#E0A800] text-[#E0A800]" : ""} />
+              {wishlist.length > 0 && (
+                <span className="absolute top-1 right-1 bg-[#111111] text-[#FAF7F0] text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                  {wishlist.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="p-2 sm:px-3 sm:py-2 bg-[#111111] text-[#FAF7F0] rounded-full hover:bg-black transition-colors flex items-center gap-2 relative shadow-md"
+              aria-label="Cart"
+            >
+              <ShoppingBag size={18} className="text-[#E0A800]" />
+              <span className="text-xs font-semibold hidden sm:inline">CART</span>
+              <span className="bg-[#E0A800] text-[#111111] text-[11px] font-bold px-1.5 py-0.2 rounded-full">
+                {totalCartItems}
+              </span>
+            </button>
+          </div>
+
+        </div>
+      </header>
+
+      {/* MOBILE SLIDE-OUT DRAWER */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
+          <div className="relative w-4/5 max-w-xs bg-[#FAF7F0] h-full shadow-2xl p-6 flex flex-col justify-between overflow-y-auto">
+            <div>
+              <div className="flex items-center justify-between pb-6 border-b border-[#E8E2D5]">
+                <span className="font-serif text-2xl font-black">makeitup</span>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 rounded-full hover:bg-black/5">
+                  <X size={22} />
+                </button>
+              </div>
+
+              <div className="py-6 space-y-4">
+                <p className="text-[10px] font-bold tracking-widest text-[#888] uppercase">Explore Categories</p>
+                {CATEGORIES_NAV.map((cat) => (
+                  <button
+                    key={cat.key}
+                    onClick={() => {
+                      setSelectedCategory(cat.key as Category);
+                      setIsMobileMenuOpen(false);
+                      window.scrollTo({ top: 600, behavior: 'smooth' });
+                    }}
+                    className="flex items-center justify-between w-full text-left font-serif text-lg py-1.5 hover:text-[#E0A800] transition-colors"
+                  >
+                    <span>{cat.name}</span>
+                    <span className="text-xs font-sans text-gray-500">{cat.count}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-[#E8E2D5] space-y-3">
+                <button
+                  onClick={() => {
+                    setIsTrackOrderOpen(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full text-left text-xs uppercase tracking-wider text-black flex items-center gap-2 hover:text-[#E0A800] font-bold py-1"
+                >
+                  <Truck size={16} className="text-[#E0A800]" /> Track My Order
+                </button>
+                <a
+                  href={`https://wa.me/${WHATSAPP_PHONE}?text=Hi%20makeitup%20team,%20I%20have%20an%20order%20inquiry!`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full text-left text-xs uppercase tracking-wider text-green-700 flex items-center gap-2 font-semibold"
+                >
+                  <MessageCircle size={16} /> WhatsApp Concierge
+                </a>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400 pt-6">
+              © {new Date().getFullYear()} makeitup fashion. All rights reserved.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEARCH OVERLAY */}
+      {isSearchOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsSearchOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-[#FAF7F0] rounded-2xl shadow-2xl p-6 border border-[#E8E2D5] z-10">
+            <div className="flex items-center justify-between pb-4 border-b border-[#E8E2D5]">
+              <div className="flex items-center gap-3 w-full">
+                <Search size={22} className="text-[#E0A800]" />
+                <input
+                  type="text"
+                  placeholder="Search shirts, kurta, trousers, sunglasses..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoFocus
+                  className="w-full bg-transparent text-lg focus:outline-none placeholder-gray-400 font-serif"
+                />
+              </div>
+              <button onClick={() => setIsSearchOpen(false)} className="p-2 text-gray-500 hover:text-black">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="pt-4 max-h-96 overflow-y-auto space-y-3">
+              {searchQuery.trim() ? (
+                filteredProducts.length > 0 ? (
+                  filteredProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      onClick={() => {
+                        setSelectedProduct(product);
+                        setIsSearchOpen(false);
+                      }}
+                      className="flex items-center gap-4 p-2 rounded-xl hover:bg-black/5 cursor-pointer transition-colors"
+                    >
+                      <img src={product.imageUrl} alt={product.name} className="w-14 h-14 object-cover rounded-lg" />
+                      <div className="flex-1">
+                        <p className="text-xs uppercase text-[#E0A800] font-bold tracking-wider">{product.category}</p>
+                        <h4 className="font-serif font-bold text-sm">{product.name}</h4>
+                        <p className="text-xs font-semibold text-gray-900">₹{product.price.toLocaleString('en-IN')}</p>
+                      </div>
+                      <ArrowRight size={18} className="text-gray-400" />
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center py-8 text-gray-500 font-serif">No pieces found matching "{searchQuery}"</p>
+                )
+              ) : (
+                <div className="py-2">
+                  <p className="text-xs uppercase tracking-wider text-gray-400 mb-2">Popular Searches</p>
+                  <div className="flex flex-wrap gap-2">
+                    {['Festive Gold Kurta', 'Vintage Comic', 'Olive Cargo', 'Oxford', 'Aviator'].map((term) => (
+                      <button
+                        key={term}
+                        onClick={() => setSearchQuery(term)}
+                        className="px-3 py-1 bg-black/5 rounded-full text-xs font-medium hover:bg-[#E0A800] hover:text-black transition-colors"
+                      >
+                        {term}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HERO CAROUSEL */}
+      <section className="relative w-full h-[75vh] min-h-[500px] max-h-[750px] overflow-hidden bg-black text-white">
+        {heroSlides.map((slide, idx) => (
+          <div
+            key={idx}
+            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+              heroSlide === idx ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <div
+              className="absolute inset-0 bg-cover bg-center transition-transform duration-7000 ease-out"
+              style={{
+                backgroundImage: `url(${slide.bg})`,
+                transform: heroSlide === idx ? 'scale(1.05)' : 'scale(1)',
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/30" />
+
+            <div className="relative h-full max-w-7xl mx-auto px-6 sm:px-12 flex flex-col justify-end pb-16 sm:pb-20">
+              <span className="text-[#E0A800] uppercase tracking-[0.25em] text-xs sm:text-sm font-semibold mb-2">
+                {slide.subtitle}
+              </span>
+              <p className="font-script text-3xl sm:text-4xl text-[#FAF7F0] opacity-90 -mb-2">
+                {slide.accent}
+              </p>
+              <h1 className="font-serif text-3xl sm:text-5xl md:text-6xl font-black tracking-tight max-w-2xl leading-tight mb-6">
+                {slide.title}
+              </h1>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => {
+                    setSelectedCategory(slide.category);
+                    window.scrollTo({ top: 650, behavior: 'smooth' });
+                  }}
+                  className="px-8 py-3.5 bg-[#E0A800] text-[#111111] font-bold text-xs uppercase tracking-widest rounded-full hover:bg-white hover:text-black transition-all transform hover:scale-105 shadow-xl flex items-center gap-2"
+                >
+                  <span>{slide.cta}</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={() => setHeroSlide((prev) => (prev - 1 + heroSlides.length) % heroSlides.length)}
+          className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-[#E0A800] hover:text-black transition-colors"
+          aria-label="Previous slide"
+        >
+          <ChevronLeft size={22} />
+        </button>
+        <button
+          onClick={() => setHeroSlide((prev) => (prev + 1) % heroSlides.length)}
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/40 backdrop-blur-md text-white flex items-center justify-center hover:bg-[#E0A800] hover:text-black transition-colors"
+          aria-label="Next slide"
+        >
+          <ChevronRight size={22} />
+        </button>
+
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+          {heroSlides.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setHeroSlide(idx)}
+              className={`h-2 transition-all rounded-full ${
+                heroSlide === idx ? 'w-8 bg-[#E0A800]' : 'w-2 bg-white/40 hover:bg-white/80'
+              }`}
+              aria-label={`Go to slide ${idx + 1}`}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* BRAND PERKS */}
+      <section className="border-b border-[#E8E2D5] bg-[#F4EFE6] py-5 px-4 sm:px-8">
+        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div className="flex items-center justify-center gap-3">
+            <Truck size={22} className="text-[#E0A800]" />
+            <div className="text-left">
+              <p className="text-xs font-bold uppercase tracking-wider">Free Delivery</p>
+              <p className="text-[11px] text-gray-600">On all orders over ₹1,999</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            <ShieldCheck size={22} className="text-[#E0A800]" />
+            <div className="text-left">
+              <p className="text-xs font-bold uppercase tracking-wider">Authentic Fabrics</p>
+              <p className="text-[11px] text-gray-600">Pure linen, modal & raw silk</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            <RotateCcw size={22} className="text-[#E0A800]" />
+            <div className="text-left">
+              <p className="text-xs font-bold uppercase tracking-wider">7-Day Easy Exchange</p>
+              <p className="text-[11px] text-gray-600">Hassle-free size replacement</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            <Sparkles size={22} className="text-[#E0A800]" />
+            <div className="text-left">
+              <p className="text-xs font-bold uppercase tracking-wider">Cash on Delivery</p>
+              <p className="text-[11px] text-gray-600">Pay at your doorstep or via UPI</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* TRENDING NOW (SWIPEABLE HORIZONTAL CAROUSEL) */}
+      <section className="py-14 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <span className="text-[#E0A800] uppercase text-xs tracking-widest font-bold">Curated Styles</span>
+            <h2 className="font-serif text-2xl sm:text-4xl font-extrabold text-[#111111] tracking-tight">
+              Trending Now
+            </h2>
+          </div>
+          <button
+            onClick={() => { setSelectedCategory('All'); window.scrollTo({ top: 1200, behavior: 'smooth' }); }}
+            className="text-xs font-bold uppercase tracking-widest text-[#111111] hover:text-[#E0A800] flex items-center gap-1 group pb-1 border-b-2 border-black hover:border-[#E0A800] transition-colors"
+          >
+            <span>VIEW ALL</span>
+            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+          </button>
+        </div>
+
+        <div className="flex gap-5 overflow-x-auto no-scrollbar pb-4 pt-1 snap-x snap-mandatory">
+          {PRODUCTS.filter((p) => p.isTrending).map((product) => (
+            <div
+              key={product.id}
+              className="min-w-[260px] sm:min-w-[280px] max-w-[290px] snap-start bg-white rounded-2xl border border-[#E8E2D5] shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group cursor-pointer"
+              onClick={() => setSelectedProduct(product)}
+            >
+              <div className="relative aspect-[4/5] overflow-hidden bg-[#EAE0D5]">
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.style.display = 'none';
+                    if (target.parentElement) target.parentElement.style.backgroundColor = product.fallbackColor;
+                  }}
+                />
+
+                {product.tag && (
+                  <span className="absolute top-3 left-3 bg-[#111111]/90 backdrop-blur-md text-[#FAF7F0] text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wider uppercase">
+                    {product.tag}
+                  </span>
+                )}
+
+                <button
+                  onClick={(e) => toggleWishlist(product.id, e)}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-[#111111] hover:bg-white shadow transition-transform active:scale-90"
+                  aria-label="Add to wishlist"
+                >
+                  <Heart
+                    size={16}
+                    className={`transition-colors ${
+                      wishlist.includes(product.id) ? 'fill-[#E0A800] text-[#E0A800] heart-active' : 'text-gray-700'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-bold tracking-widest uppercase text-[#E0A800]">
+                    {product.category}
+                  </span>
+                  <h3 className="font-serif text-base font-bold text-gray-900 group-hover:text-[#E0A800] transition-colors line-clamp-1 mt-0.5">
+                    {product.name}
+                  </h3>
+
+                  <div className="flex items-center gap-1 mt-1 text-amber-500">
+                    <Star size={13} className="fill-amber-400 text-amber-400" />
+                    <span className="text-xs font-semibold text-gray-700">{product.rating}</span>
+                    <span className="text-[10px] text-gray-400">({product.reviewsCount})</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-base font-bold text-[#111111]">
+                      ₹{product.price.toLocaleString('en-IN')}
+                    </span>
+                    {product.originalPrice && (
+                      <span className="text-xs text-gray-400 line-through ml-2">
+                        ₹{product.originalPrice.toLocaleString('en-IN')}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToCart(product);
+                    }}
+                    className="px-3 py-1.5 bg-[#111111] text-[#FAF7F0] hover:bg-[#E0A800] hover:text-black rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
+                  >
+                    + Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* SHOP BY CATEGORY TILES */}
+      <section className="py-12 bg-[#F4EFE6] border-y border-[#E8E2D5]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-xl mx-auto mb-10">
+            <span className="text-[#E0A800] uppercase text-xs tracking-widest font-bold">Collections</span>
+            <h2 className="font-serif text-3xl font-extrabold text-[#111111] mt-1">Shop by Category</h2>
+            <p className="text-gray-600 text-sm mt-2">Engineered silhouettes, premium weaves, and signature cuts tailored for the modern Indian gentleman.</p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {CATEGORIES_NAV.map((cat) => (
+              <div
+                key={cat.key}
+                onClick={() => {
+                  setSelectedCategory(cat.key as Category);
+                  window.scrollTo({ top: 1100, behavior: 'smooth' });
+                }}
+                className="group relative rounded-2xl overflow-hidden aspect-[3/4] cursor-pointer shadow-sm hover:shadow-lg transition-all"
+              >
+                <img
+                  src={cat.img}
+                  alt={cat.name}
+                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-4 text-white">
+                  <h3 className="font-serif text-lg font-bold group-hover:text-[#E0A800] transition-colors">
+                    {cat.name}
+                  </h3>
+                  <p className="text-[11px] text-gray-300 tracking-wider uppercase font-medium">{cat.count}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* MAIN NEW ARRIVALS CATALOG WITH FILTER & SORT */}
+      <section id="catalog" className="py-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 border-b border-[#E8E2D5] pb-6">
+          <div>
+            <span className="text-[#E0A800] uppercase text-xs tracking-widest font-bold">New Arrivals</span>
+            <h2 className="font-serif text-3xl sm:text-4xl font-extrabold text-[#111111]">
+              The makeitup Wardrobe
+            </h2>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-xl border border-[#E8E2D5]">
+              {(['All', 'Shirt', 'Ethnic', 'T-Shirt', 'Trousers', 'Jeans', 'Accessories'] as Category[]).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all ${
+                    selectedCategory === cat
+                      ? 'bg-[#111111] text-[#FAF7F0] shadow-sm'
+                      : 'text-gray-600 hover:text-black hover:bg-black/5'
+                  }`}
+                >
+                  {cat === 'All' ? 'All Pieces' : cat}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <SlidersHorizontal size={16} className="text-gray-500" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-white border border-[#E8E2D5] text-xs font-medium rounded-xl px-3 py-2 text-gray-800 focus:outline-none"
+              >
+                <option value="featured">Sort: Featured</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="price-high">Price: High to Low</option>
+                <option value="rating">Top Rated</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {filteredProducts.map((product) => (
+            <div
+              key={product.id}
+              className="bg-white rounded-2xl border border-[#E8E2D5] shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group cursor-pointer"
+              onClick={() => setSelectedProduct(product)}
+            >
+              <div className="relative aspect-[4/5] overflow-hidden bg-[#EAE0D5]">
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  loading="lazy"
+                  className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.style.display = 'none';
+                    if (target.parentElement) target.parentElement.style.backgroundColor = product.fallbackColor;
+                  }}
+                />
+
+                {product.tag && (
+                  <span className="absolute top-3 left-3 bg-[#111111]/90 backdrop-blur-md text-[#FAF7F0] text-[10px] font-bold px-2.5 py-1 rounded-full tracking-wider uppercase">
+                    {product.tag}
+                  </span>
+                )}
+
+                <button
+                  onClick={(e) => toggleWishlist(product.id, e)}
+                  className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-[#111111] hover:bg-white shadow transition-transform active:scale-90"
+                  aria-label="Wishlist toggle"
+                >
+                  <Heart
+                    size={16}
+                    className={`transition-colors ${
+                      wishlist.includes(product.id) ? 'fill-[#E0A800] text-[#E0A800] heart-active' : 'text-gray-700'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-bold tracking-widest uppercase text-[#E0A800]">
+                    {product.category}
+                  </span>
+                  <h3 className="font-serif text-base font-bold text-gray-900 group-hover:text-[#E0A800] transition-colors mt-0.5">
+                    {product.name}
+                  </h3>
+                  <p className="text-xs text-gray-500 line-clamp-2 mt-1">{product.description}</p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <div>
+                    <span className="text-base font-bold text-[#111111]">
+                      ₹{product.price.toLocaleString('en-IN')}
+                    </span>
+                    {product.originalPrice && (
+                      <span className="text-xs text-gray-400 line-through ml-2">
+                        ₹{product.originalPrice.toLocaleString('en-IN')}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToCart(product);
+                    }}
+                    className="px-3.5 py-1.5 bg-[#111111] text-[#FAF7F0] hover:bg-[#E0A800] hover:text-black rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
+                  >
+                    Select
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* FESTIVE EDITORIAL BANNER */}
+      <section className="my-8 mx-4 sm:mx-8 rounded-3xl overflow-hidden relative bg-[#111111] text-[#FAF7F0] py-20 px-6 sm:px-16 border border-[#333]">
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1617137984095-74e4e5e3613f?w=1600&q=80')" }}
+        />
+        <div className="relative max-w-2xl">
+          <span className="text-[#E0A800] uppercase tracking-[0.25em] text-xs font-bold">Limited Edition</span>
+          <p className="font-script text-4xl sm:text-5xl text-[#E0A800] my-2">Celebrate in Style</p>
+          <h2 className="font-serif text-3xl sm:text-5xl font-black leading-tight mb-4">
+            The Festive Gold Kurta & Heritage Shirts
+          </h2>
+          <p className="text-gray-300 text-sm sm:text-base mb-8 leading-relaxed">
+            Meticulously woven raw silks and tailored cotton shirts crafted for festive evenings, weddings, and milestones. Wear your heritage with modern poise.
+          </p>
+          <button
+            onClick={() => { setSelectedCategory('Ethnic'); window.scrollTo({ top: 1100, behavior: 'smooth' }); }}
+            className="px-8 py-3.5 bg-[#E0A800] text-[#111111] font-bold text-xs uppercase tracking-widest rounded-full hover:bg-white transition-all transform hover:scale-105 shadow-xl"
+          >
+            DISCOVER ETHNIC EDIT
+          </button>
+        </div>
+      </section>
+
+      {/* CUSTOMER REVIEWS */}
+      <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+        <div className="text-center max-w-xl mx-auto mb-12">
+          <span className="text-[#E0A800] uppercase text-xs tracking-widest font-bold">Gentlemen's Verdict</span>
+          <h2 className="font-serif text-3xl font-extrabold text-[#111111] mt-1">Customer Reviews</h2>
+          <p className="text-gray-600 text-sm mt-2">Loved by over 10,000 discerning men across India.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {REVIEWS.map((rev) => (
+            <div key={rev.id} className="bg-white rounded-2xl p-6 border border-[#E8E2D5] shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-1 text-amber-500 mb-3">
+                  {[...Array(rev.rating)].map((_, i) => (
+                    <Star key={i} size={16} className="fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+                <h3 className="font-serif font-bold text-base text-gray-900 mb-2">"{rev.title}"</h3>
+                <p className="text-xs text-gray-600 leading-relaxed italic">{rev.text}</p>
+              </div>
+              <div className="pt-4 mt-4 border-t border-gray-100 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-gray-900">{rev.name}</p>
+                  <p className="text-[10px] text-gray-400">{rev.city} • Verified Buyer</p>
+                </div>
+                <span className="text-[10px] font-medium text-[#E0A800] bg-amber-50 px-2 py-0.5 rounded">
+                  {rev.productName}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* INSTAGRAM LOOKBOOK */}
+      <section className="py-12 bg-[#F4EFE6] border-t border-[#E8E2D5]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <span className="text-[#E0A800] uppercase text-xs tracking-widest font-bold">Community</span>
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold mt-1">#makeitupmen</h2>
+          <p className="text-xs text-gray-600 mb-8">Tag @makeitup on Instagram to get featured in our editorial lookbook.</p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {INSTAGRAM_POSTS.map((post) => (
+              <div key={post.id} className="group relative rounded-2xl overflow-hidden aspect-square shadow-sm">
+                <img
+                  src={post.img}
+                  alt={post.handle}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                />
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white p-4">
+                  <p className="font-serif font-bold text-sm">{post.handle}</p>
+                  <p className="text-xs text-amber-300 flex items-center gap-1 mt-1">
+                    <Heart size={12} className="fill-amber-300" /> {post.likes} likes
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* NEWSLETTER SIGNUP */}
+      <section className="py-16 bg-[#111111] text-[#FAF7F0] px-4">
+        <div className="max-w-xl mx-auto text-center">
+          <span className="text-[#E0A800] uppercase tracking-widest text-xs font-bold">The Editorial Dispatch</span>
+          <h2 className="font-serif text-3xl font-bold mt-2">Get 10% Off Your First Order</h2>
+          <p className="text-gray-400 text-xs sm:text-sm mt-2 mb-6">
+            Subscribe for secret seasonal drops, styling guides, and festive capsule previews.
+          </p>
+
+          {newsletterSubscribed ? (
+            <div className="bg-[#E0A800]/20 border border-[#E0A800] text-[#E0A800] p-4 rounded-xl text-xs font-medium flex items-center justify-center gap-2">
+              <CheckCircle2 size={16} />
+              <span>You're in! Use coupon code <strong className="underline text-white">MAKEITUP10</strong> at checkout.</span>
+            </div>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (newsletterEmail.trim()) setNewsletterSubscribed(true);
+              }}
+              className="flex flex-col sm:flex-row gap-2 max-w-md mx-auto"
+            >
+              <input
+                type="email"
+                required
+                placeholder="Enter your email address"
+                value={newsletterEmail}
+                onChange={(e) => setNewsletterEmail(e.target.value)}
+                className="bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-[#E0A800] flex-1"
+              />
+              <button
+                type="submit"
+                className="px-6 py-3 bg-[#E0A800] text-[#111111] font-bold text-xs uppercase tracking-widest rounded-xl hover:bg-white transition-colors"
+              >
+                Subscribe
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="bg-[#FAF7F0] border-t border-[#E8E2D5] pt-16 pb-12 text-[#111111]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-10">
+          
+          <div className="space-y-4">
+            <span className="font-serif text-3xl font-extrabold tracking-tight">makeitup</span>
+            <p className="text-xs text-gray-600 leading-relaxed font-sans">
+              "Make it yours. Make it up."<br />
+              Contemporary menswear crafted for men who appreciate distinct craftsmanship, cultural heritage, and modern sartorial cuts.
+            </p>
+            <div className="text-xs text-gray-600">
+              <p>Email: <a href="mailto:josephamalraj.co@gmail.com" className="underline font-medium">josephamalraj.co@gmail.com</a></p>
+              <p className="mt-1">Mon–Sat: 10:00 AM – 7:00 PM IST</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#111111]">Quick Navigation</p>
+            <ul className="text-xs space-y-2 text-gray-600">
+              <li><button onClick={() => { setSelectedCategory('All'); window.scrollTo({ top: 1100, behavior: 'smooth' }); }} className="hover:text-black">All Collections</button></li>
+              <li><button onClick={() => { setSelectedCategory('Shirt'); window.scrollTo({ top: 1100, behavior: 'smooth' }); }} className="hover:text-black">Printed & Classic Shirts</button></li>
+              <li><button onClick={() => { setSelectedCategory('Ethnic'); window.scrollTo({ top: 1100, behavior: 'smooth' }); }} className="hover:text-black">Festive Silk Kurtas</button></li>
+              <li><button onClick={() => { setSelectedCategory('Trousers'); window.scrollTo({ top: 1100, behavior: 'smooth' }); }} className="hover:text-black">Cargos & Formal Trousers</button></li>
+              <li><button onClick={() => { setSelectedCategory('Accessories'); window.scrollTo({ top: 1100, behavior: 'smooth' }); }} className="hover:text-black">Leather Belts & Aviators</button></li>
+            </ul>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#111111]">Order & Delivery</p>
+            <ul className="text-xs space-y-2 text-gray-600">
+              <li>
+                <button
+                  onClick={() => {
+                    setIsTrackOrderOpen(true);
+                    if (savedOrders.length > 0 && !trackedOrder) {
+                      setTrackedOrder(savedOrders[0]);
+                      setTrackingInputId(savedOrders[0].orderId);
+                    }
+                  }}
+                  className="text-black font-bold hover:text-[#E0A800] flex items-center gap-1.5"
+                >
+                  <Truck size={14} className="text-[#E0A800]" /> Track Your Order Live
+                </button>
+              </li>
+              <li><span>Free Express Shipping over ₹1,999</span></li>
+              <li><span>7-Day Return & Size Exchange</span></li>
+              <li><span>Cash on Delivery & Secure UPI</span></li>
+            </ul>
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-widest text-[#111111]">Stylist Support</p>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              Have questions regarding sizing, custom tailoring, or tracking? Chat with our stylist concierge anytime.
+            </p>
+            <a
+              href={`https://wa.me/${WHATSAPP_PHONE}?text=Hi%20makeitup%20team,%20I%20need%20help%20with%20an%20order`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-700 text-white text-xs font-bold rounded-lg hover:bg-green-800 transition-colors shadow"
+            >
+              <MessageCircle size={16} /> WhatsApp Support
+            </a>
+          </div>
+
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 pt-6 border-t border-[#E8E2D5] flex flex-col sm:flex-row items-center justify-between text-xs text-gray-500 gap-4">
+          <p>© {new Date().getFullYear()} makeitup fashion. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <span className="font-semibold text-gray-800">COD & UPI Accepted</span>
+          </div>
+        </div>
+      </footer>
+
+      {/* FLOATING WHATSAPP BUTTON */}
+      <a
+        href={`https://wa.me/${WHATSAPP_PHONE}?text=Hi%20makeitup%20team,%20I'd%20like%20to%20inquire%20about%20your%20menswear%20collection`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-40 bg-[#25D366] text-white p-3.5 rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all flex items-center justify-center group"
+        aria-label="Chat on WhatsApp"
+      >
+        <MessageCircle size={26} />
+        <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 ease-in-out font-bold text-xs pl-0 group-hover:pl-2">
+          Chat with Stylist
+        </span>
+      </a>
+
+      {/* ========================================================================= */}
+      {/* 1. TRACK ORDER MODAL */}
+      {/* ========================================================================= */}
+      {isTrackOrderOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setIsTrackOrderOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-[#FAF7F0] rounded-3xl shadow-2xl overflow-hidden border border-[#E8E2D5] z-10 max-h-[92vh] flex flex-col">
+            
+            <div className="p-6 border-b border-[#E8E2D5] flex items-center justify-between bg-white">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-full bg-[#111111] text-[#E0A800] flex items-center justify-center">
+                  <Truck size={20} />
+                </div>
+                <div>
+                  <h3 className="font-serif text-xl font-bold">Track Your Order</h3>
+                  <p className="text-xs text-gray-500">Real-time status & purchase summary from your account</p>
+                </div>
+              </div>
+              <button onClick={() => setIsTrackOrderOpen(false)} className="p-1.5 rounded-full hover:bg-black/5">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              
+              <div className="bg-white p-4 rounded-2xl border border-[#E8E2D5] shadow-xs">
+                <label className="block text-xs font-bold uppercase tracking-wider text-gray-800 mb-2">
+                  Enter Order ID (e.g. MIU-849201)
+                </label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Package size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="e.g. MIU-849201"
+                      value={trackingInputId}
+                      onChange={(e) => setTrackingInputId(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSearchOrder(); }}
+                      className="w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-mono uppercase focus:outline-none focus:border-black focus:bg-white"
+                    />
+                  </div>
+                  <button
+                    onClick={() => handleSearchOrder()}
+                    className="px-6 py-2.5 bg-[#111111] text-[#FAF7F0] hover:bg-[#E0A800] hover:text-black font-bold text-xs uppercase tracking-wider rounded-xl transition-colors shadow"
+                  >
+                    Track
+                  </button>
+                </div>
+
+                {trackingSearchError && (
+                  <p className="text-xs text-red-600 mt-2 font-medium">{trackingSearchError}</p>
+                )}
+
+                {savedOrders.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-gray-500">Saved orders:</span>
+                    {savedOrders.map((ord) => (
+                      <button
+                        key={ord.orderId}
+                        onClick={() => handleSearchOrder(ord.orderId)}
+                        className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold transition-colors ${
+                          trackedOrder?.orderId === ord.orderId
+                            ? 'bg-[#111111] text-[#E0A800] border-black'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border-gray-200'
+                        }`}
+                      >
+                        {ord.orderId}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {trackedOrder ? (
+                <div className="space-y-6">
+                  
+                  <div className="bg-[#111111] text-white p-5 rounded-2xl border border-black/10 shadow-md">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3 mb-4">
+                      <div>
+                        <span className="text-[10px] text-[#E0A800] font-bold uppercase tracking-wider">
+                          Order #{trackedOrder.orderId}
+                        </span>
+                        <p className="text-xs text-gray-300">Placed on {trackedOrder.orderDate}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-block bg-[#E0A800] text-black font-black text-xs px-3 py-1 rounded-full uppercase tracking-wider">
+                          {trackedOrder.status === 'Delivered' ? 'Delivered' : trackedOrder.status === 'Shipped' ? 'In Transit / Dispatched' : 'Order Confirmed'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="py-2">
+                      <div className="grid grid-cols-4 relative text-center text-[10px] font-semibold text-gray-300">
+                        <div className="absolute top-3.5 left-[12%] right-[12%] h-0.5 bg-gray-700 z-0">
+                          <div
+                            className="h-full bg-[#E0A800] transition-all duration-500"
+                            style={{
+                              width:
+                                trackedOrder.status === 'Delivered'
+                                  ? '100%'
+                                  : trackedOrder.status === 'Shipped'
+                                  ? '66%'
+                                  : '33%',
+                            }}
+                          />
+                        </div>
+
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className="w-7 h-7 rounded-full bg-[#E0A800] text-black flex items-center justify-center font-bold text-xs mb-1.5 shadow">
+                            <Check size={14} />
+                          </div>
+                          <span className="text-white font-bold">Confirmed</span>
+                        </div>
+
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className="w-7 h-7 rounded-full bg-[#E0A800] text-black flex items-center justify-center font-bold text-xs mb-1.5 shadow">
+                            <Check size={14} />
+                          </div>
+                          <span className="text-white font-bold">Packed</span>
+                        </div>
+
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow ${
+                            trackedOrder.status === 'Shipped' || trackedOrder.status === 'Delivered'
+                              ? 'bg-[#E0A800] text-black'
+                              : 'bg-gray-800 text-gray-400'
+                          }`}>
+                            <Truck size={14} />
+                          </div>
+                          <span className={trackedOrder.status === 'Shipped' || trackedOrder.status === 'Delivered' ? 'text-white font-bold' : 'text-gray-400'}>
+                            Dispatched
+                          </span>
+                        </div>
+
+                        <div className="relative z-10 flex flex-col items-center">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-1.5 shadow ${
+                            trackedOrder.status === 'Delivered'
+                              ? 'bg-green-500 text-white'
+                              : 'bg-gray-800 text-gray-400'
+                          }`}>
+                            <CheckCircle2 size={14} />
+                          </div>
+                          <span className={trackedOrder.status === 'Delivered' ? 'text-green-400 font-bold' : 'text-gray-400'}>
+                            Delivered
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between text-xs text-gray-300">
+                      <div>
+                        <span>Carrier: <strong className="text-white">{trackedOrder.courierName}</strong></span>
+                        <span className="mx-2">•</span>
+                        <span>AWB: <strong className="text-white font-mono">{trackedOrder.trackingNumber}</strong></span>
+                      </div>
+                      <div className="text-amber-300 font-semibold flex items-center gap-1">
+                        <Clock size={14} /> Est. Delivery: {trackedOrder.estimatedDelivery}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl border border-[#E8E2D5] space-y-3">
+                    <p className="text-xs font-bold uppercase tracking-wider text-black border-b border-gray-100 pb-2">
+                      Purchased Items ({trackedOrder.items.length})
+                    </p>
+                    {trackedOrder.items.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                        <img
+                          src={item.product.imageUrl}
+                          alt={item.product.name}
+                          className="w-14 h-16 object-cover rounded-xl bg-gray-100"
+                        />
+                        <div className="flex-1">
+                          <h4 className="font-serif font-bold text-sm text-gray-900">{item.product.name}</h4>
+                          <p className="text-xs text-gray-500">Size: <strong className="text-black">{item.selectedSize}</strong> • Qty: {item.quantity}</p>
+                        </div>
+                        <div className="text-right font-bold text-xs text-black">
+                          ₹{(item.product.price * item.quantity).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="pt-3 border-t border-gray-100 space-y-1 text-xs">
+                      <div className="flex justify-between text-gray-600">
+                        <span>Subtotal</span>
+                        <span>₹{trackedOrder.subtotal.toLocaleString('en-IN')}</span>
+                      </div>
+                      {trackedOrder.discount > 0 && (
+                        <div className="flex justify-between text-green-700 font-semibold">
+                          <span>Promotional Discount</span>
+                          <span>-₹{trackedOrder.discount.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-gray-600">
+                        <span>Shipping</span>
+                        <span>{trackedOrder.shipping === 0 ? 'FREE' : `₹${trackedOrder.shipping}`}</span>
+                      </div>
+                      <div className="flex justify-between font-extrabold text-sm text-black pt-1 border-t border-gray-100">
+                        <span>Total Paid ({trackedOrder.customer.paymentMethod})</span>
+                        <span>₹{trackedOrder.total.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl border border-[#E8E2D5] text-xs">
+                    <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-black mb-2">
+                      <MapPin size={16} className="text-[#E0A800]" /> Destination Address
+                    </div>
+                    <p className="font-semibold text-gray-900">{trackedOrder.customer.name} ({trackedOrder.customer.phone})</p>
+                    <p className="text-gray-600 mt-0.5">{trackedOrder.customer.address}, {trackedOrder.customer.city} - {trackedOrder.customer.pincode}</p>
+                    {trackedOrder.customer.notes && (
+                      <p className="text-gray-500 italic mt-1">Delivery note: "{trackedOrder.customer.notes}"</p>
+                    )}
+                  </div>
+
+                  <a
+                    href={`https://wa.me/${WHATSAPP_PHONE}?text=Hi%20makeitup,%20I'm%20inquiring%20about%20Order%20ID%20${trackedOrder.orderId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3 bg-green-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-green-800 transition-colors flex items-center justify-center gap-2 shadow"
+                  >
+                    <MessageCircle size={16} /> Need Delivery Updates? Inquire on WhatsApp
+                  </a>
+
+                </div>
+              ) : (
+                <div className="text-center py-10 bg-white rounded-2xl border border-[#E8E2D5] p-6">
+                  <Package size={40} className="mx-auto text-gray-300 mb-2" />
+                  <p className="font-serif font-bold text-base text-gray-800">Track Any Order</p>
+                  <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                    Enter the Order ID from your confirmation email or receipt to view delivery timelines and saved item summaries.
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (savedOrders.length > 0) {
+                        setTrackedOrder(savedOrders[0]);
+                        setTrackingInputId(savedOrders[0].orderId);
+                      }
+                    }}
+                    className="mt-4 px-4 py-2 bg-black/5 hover:bg-black/10 rounded-xl text-xs font-semibold text-gray-800"
+                  >
+                    Load Sample Order ({SAMPLE_ORDER.orderId})
+                  </button>
+                </div>
+              )}
+
+            </div>
+
+            <div className="p-4 border-t border-[#E8E2D5] bg-white flex justify-end">
+              <button
+                onClick={() => setIsTrackOrderOpen(false)}
+                className="px-6 py-2.5 bg-[#111111] text-[#FAF7F0] rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-black transition-colors"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. PRODUCT QUICK VIEW MODAL */}
+      {/* ========================================================================= */}
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSelectedProduct(null)} />
+          <div className="relative w-full max-w-3xl bg-[#FAF7F0] rounded-3xl shadow-2xl overflow-hidden border border-[#E8E2D5] z-10 max-h-[90vh] flex flex-col md:flex-row">
+            
+            <div className="md:w-1/2 aspect-[4/5] md:aspect-auto relative bg-[#EAE0D5]">
+              <img
+                src={selectedProduct.imageUrl}
+                alt={selectedProduct.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.style.display = 'none';
+                  if (target.parentElement) target.parentElement.style.backgroundColor = selectedProduct.fallbackColor;
+                }}
+              />
+              {selectedProduct.tag && (
+                <span className="absolute top-4 left-4 bg-black text-[#FAF7F0] text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                  {selectedProduct.tag}
+                </span>
+              )}
+            </div>
+
+            <div className="md:w-1/2 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-widest text-[#E0A800]">
+                    {selectedProduct.category}
+                  </span>
+                  <button onClick={() => setSelectedProduct(null)} className="p-1 rounded-full hover:bg-black/5">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <h3 className="font-serif text-2xl font-black text-gray-950 mt-1">{selectedProduct.name}</h3>
+
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center text-amber-500">
+                    <Star size={16} className="fill-amber-400 text-amber-400" />
+                    <span className="text-sm font-bold text-gray-800 ml-1">{selectedProduct.rating}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">({selectedProduct.reviewsCount} customer reviews)</span>
+                </div>
+
+                <div className="mt-4 flex items-baseline gap-3">
+                  <span className="text-2xl font-black text-[#111111]">
+                    ₹{selectedProduct.price.toLocaleString('en-IN')}
+                  </span>
+                  {selectedProduct.originalPrice && (
+                    <span className="text-sm text-gray-400 line-through">
+                      ₹{selectedProduct.originalPrice.toLocaleString('en-IN')}
+                    </span>
+                  )}
+                  <span className="text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded">
+                    Inclusive of all taxes
+                  </span>
+                </div>
+
+                <p className="text-xs sm:text-sm text-gray-600 mt-4 leading-relaxed">
+                  {selectedProduct.description}
+                </p>
+
+                <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-700">
+                  <p><strong className="font-semibold text-black">Fabric:</strong> {selectedProduct.fabric}</p>
+                  <p className="mt-1"><strong className="font-semibold text-black">Fit:</strong> Tailored Comfort / True to Size</p>
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-black">Select Size</span>
+                    <span className="text-[11px] text-gray-500 underline cursor-pointer">Size Guide</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedProduct.sizes.map((sz, idx) => (
+                      <span
+                        key={idx}
+                        className="px-3 py-1.5 border border-black/20 rounded-lg text-xs font-bold bg-white text-black shadow-xs"
+                      >
+                        {sz}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-gray-200 flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    addToCart(selectedProduct);
+                    setSelectedProduct(null);
+                  }}
+                  className="flex-1 py-3.5 bg-[#111111] text-[#FAF7F0] hover:bg-[#E0A800] hover:text-black font-bold text-xs uppercase tracking-widest rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag size={18} /> Add to Cart
+                </button>
+                <button
+                  onClick={(e) => toggleWishlist(selectedProduct.id, e)}
+                  className="p-3.5 border border-black/20 rounded-xl hover:bg-black/5 transition-colors"
+                  aria-label="Wishlist"
+                >
+                  <Heart
+                    size={20}
+                    className={wishlist.includes(selectedProduct.id) ? "fill-[#E0A800] text-[#E0A800]" : "text-black"}
+                  />
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. SLIDE-IN CART DRAWER */}
+      {/* ========================================================================= */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsCartOpen(false)} />
+          <div className="relative w-full max-w-md bg-[#FAF7F0] h-full shadow-2xl flex flex-col justify-between z-10">
+            
+            <div className="p-6 border-b border-[#E8E2D5] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShoppingBag size={22} className="text-[#E0A800]" />
+                <h3 className="font-serif text-xl font-bold">Your Bag</h3>
+                <span className="text-xs bg-[#111111] text-[#FAF7F0] px-2 py-0.5 rounded-full font-bold">
+                  {totalCartItems}
+                </span>
+              </div>
+              <button onClick={() => setIsCartOpen(false)} className="p-1 rounded-full hover:bg-black/5">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="bg-[#F4EFE6] px-6 py-3 border-b border-[#E8E2D5] text-xs">
+              {cartSubtotal >= 1999 ? (
+                <p className="text-green-800 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 size={16} className="text-green-600" />
+                  Congratulations! You unlocked <strong>FREE Express Shipping</strong>.
+                </p>
+              ) : (
+                <div>
+                  <p className="text-gray-700">
+                    Add <strong>₹{(1999 - cartSubtotal).toLocaleString('en-IN')}</strong> more for <strong className="text-black">FREE Shipping</strong>
+                  </p>
+                  <div className="w-full bg-gray-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div
+                      className="bg-[#E0A800] h-full rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, (cartSubtotal / 1999) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {cart.length === 0 ? (
+                <div className="text-center py-16">
+                  <ShoppingBag size={48} className="mx-auto text-gray-300 mb-3" />
+                  <p className="font-serif text-lg font-bold text-gray-800">Your bag is empty</p>
+                  <p className="text-xs text-gray-500 mt-1 mb-6">Discover our curated festive edits and shirts.</p>
+                  <button
+                    onClick={() => { setIsCartOpen(false); window.scrollTo({ top: 600, behavior: 'smooth' }); }}
+                    className="px-6 py-2.5 bg-[#111111] text-[#FAF7F0] text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-[#E0A800] hover:text-black transition-colors"
+                  >
+                    Start Shopping
+                  </button>
+                </div>
+              ) : (
+                cart.map((item) => (
+                  <div
+                    key={`${item.product.id}-${item.selectedSize}`}
+                    className="flex gap-4 p-3 bg-white rounded-2xl border border-[#E8E2D5] shadow-xs"
+                  >
+                    <img
+                      src={item.product.imageUrl}
+                      alt={item.product.name}
+                      className="w-20 h-24 object-cover rounded-xl bg-gray-100"
+                    />
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between">
+                          <h4 className="font-serif font-bold text-sm text-gray-900 line-clamp-1">
+                            {item.product.name}
+                          </h4>
+                          <button
+                            onClick={() => removeCartItem(item.product.id, item.selectedSize)}
+                            className="text-gray-400 hover:text-red-500 p-0.5"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                        <span className="text-[10px] font-semibold bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                          Size: {item.selectedSize}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                          <button
+                            onClick={() => updateCartQuantity(item.product.id, item.selectedSize, -1)}
+                            className="px-2 py-1 text-xs hover:bg-gray-200 text-gray-700 font-bold"
+                          >
+                            -
+                          </button>
+                          <span className="px-2.5 text-xs font-semibold">{item.quantity}</span>
+                          <button
+                            onClick={() => updateCartQuantity(item.product.id, item.selectedSize, 1)}
+                            className="px-2 py-1 text-xs hover:bg-gray-200 text-gray-700 font-bold"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <span className="text-sm font-bold text-black">
+                          ₹{(item.product.price * item.quantity).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {cart.length > 0 && (
+              <div className="p-6 border-t border-[#E8E2D5] bg-white space-y-4">
+                <div className="space-y-1">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Coupon: MAKEITUP10"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      className="flex-1 px-3 py-2 text-xs border border-gray-300 rounded-xl uppercase font-medium focus:outline-none focus:border-black"
+                    />
+                    <button
+                      onClick={applyCoupon}
+                      className="px-4 py-2 bg-black text-white text-xs font-bold rounded-xl hover:bg-[#E0A800] hover:text-black transition-colors"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  {couponError && <p className="text-[11px] text-red-500 font-medium">{couponError}</p>}
+                  {appliedCoupon && (
+                    <p className="text-[11px] text-green-700 font-semibold">
+                      ✓ Coupon {appliedCoupon.code} applied ({appliedCoupon.discountPercent}% off)
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 text-xs pt-2">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Subtotal</span>
+                    <span>₹{cartSubtotal.toLocaleString('en-IN')}</span>
+                  </div>
+                  {appliedCoupon && (
+                    <div className="flex justify-between text-green-700 font-semibold">
+                      <span>Discount ({appliedCoupon.discountPercent}%)</span>
+                      <span>-₹{discountAmount.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-gray-600">
+                    <span>Delivery</span>
+                    <span>{shippingFee === 0 ? <strong className="text-green-700">FREE</strong> : `₹${shippingFee}`}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-extrabold text-black pt-2 border-t border-gray-100">
+                    <span>Grand Total</span>
+                    <span>₹{cartTotal.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setIsCartOpen(false);
+                    setIsCheckoutOpen(true);
+                  }}
+                  className="w-full py-4 bg-[#111111] text-[#FAF7F0] hover:bg-[#E0A800] hover:text-black font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-xl flex items-center justify-center gap-2"
+                >
+                  <span>Proceed to Checkout</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. WISHLIST DRAWER */}
+      {/* ========================================================================= */}
+      {isWishlistOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsWishlistOpen(false)} />
+          <div className="relative w-full max-w-md bg-[#FAF7F0] h-full shadow-2xl flex flex-col justify-between z-10">
+            
+            <div className="p-6 border-b border-[#E8E2D5] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Heart size={20} className="fill-[#E0A800] text-[#E0A800]" />
+                <h3 className="font-serif text-xl font-bold">Saved Items</h3>
+                <span className="text-xs bg-[#111111] text-[#FAF7F0] px-2 py-0.5 rounded-full font-bold">
+                  {wishlist.length}
+                </span>
+              </div>
+              <button onClick={() => setIsWishlistOpen(false)} className="p-1 rounded-full hover:bg-black/5">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {wishlist.length === 0 ? (
+                <div className="text-center py-16">
+                  <Heart size={44} className="mx-auto text-gray-300 mb-3" />
+                  <p className="font-serif text-lg font-bold text-gray-800">Your wishlist is empty</p>
+                  <p className="text-xs text-gray-500 mt-1 mb-6">Tap the heart on any piece to save it for later.</p>
+                </div>
+              ) : (
+                PRODUCTS.filter((p) => wishlist.includes(p.id)).map((product) => (
+                  <div
+                    key={product.id}
+                    className="flex gap-4 p-3 bg-white rounded-2xl border border-[#E8E2D5] shadow-xs"
+                  >
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      className="w-18 h-22 object-cover rounded-xl"
+                    />
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between">
+                          <h4 className="font-serif font-bold text-sm text-gray-900 line-clamp-1">{product.name}</h4>
+                          <button onClick={() => toggleWishlist(product.id)} className="text-gray-400 hover:text-red-500">
+                            <X size={16} />
+                          </button>
+                        </div>
+                        <p className="text-xs font-bold text-black mt-1">₹{product.price.toLocaleString('en-IN')}</p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          addToCart(product);
+                          toggleWishlist(product.id);
+                        }}
+                        className="mt-2 py-1.5 bg-[#111111] text-[#FAF7F0] text-xs font-bold rounded-lg hover:bg-[#E0A800] hover:text-black transition-colors"
+                      >
+                        Move to Bag
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="p-6 border-t border-[#E8E2D5] bg-white">
+              <button
+                onClick={() => setIsWishlistOpen(false)}
+                className="w-full py-3 border border-black rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-black hover:text-white transition-colors"
+              >
+                Continue Browsing
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. CHECKOUT MODAL */}
+      {/* ========================================================================= */}
+      {isCheckoutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsCheckoutOpen(false)} />
+          <div className="relative w-full max-w-2xl bg-[#FAF7F0] rounded-3xl shadow-2xl overflow-hidden border border-[#E8E2D5] z-10 max-h-[95vh] flex flex-col">
+            
+            <div className="p-6 border-b border-[#E8E2D5] flex items-center justify-between bg-white">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#E0A800]">Fast Checkout</span>
+                <h3 className="font-serif text-2xl font-bold">Delivery & Payment</h3>
+              </div>
+              <button onClick={() => setIsCheckoutOpen(false)} className="p-1 rounded-full hover:bg-black/5">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handlePlaceOrder} className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              
+              <div className="bg-[#F4EFE6] p-4 rounded-2xl border border-[#E8E2D5] flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-semibold text-gray-800">{totalCartItems} item(s) in bag</span>
+                  <p className="text-gray-500">Shipping to your verified address</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-base font-black text-black">₹{cartTotal.toLocaleString('en-IN')}</span>
+                  {shippingFee === 0 && <p className="text-[10px] text-green-700 font-bold">FREE Delivery</p>}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-xs font-bold uppercase tracking-widest text-black">1. Customer Details</p>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Rahul Sharma"
+                      value={checkoutForm.name}
+                      onChange={(e) => setCheckoutForm({ ...checkoutForm, name: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-black"
+                    />
+                    {formErrors.name && <p className="text-[10px] text-red-500 mt-1">{formErrors.name}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Mobile Phone (10 digits) *</label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. 9876543210"
+                      value={checkoutForm.phone}
+                      onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-black"
+                    />
+                    {formErrors.phone && <p className="text-[10px] text-red-500 mt-1">{formErrors.phone}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Email Address (Order Confirmation) *</label>
+                  <input
+                    type="email"
+                    placeholder="e.g. rahul@gmail.com"
+                    value={checkoutForm.email}
+                    onChange={(e) => setCheckoutForm({ ...checkoutForm, email: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-black"
+                  />
+                  {formErrors.email && <p className="text-[10px] text-red-500 mt-1">{formErrors.email}</p>}
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-black">2. Shipping Address</p>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Flat / House No. / Street Address *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Flat 402, Signature Heights, MG Road"
+                    value={checkoutForm.address}
+                    onChange={(e) => setCheckoutForm({ ...checkoutForm, address: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-black"
+                  />
+                  {formErrors.address && <p className="text-[10px] text-red-500 mt-1">{formErrors.address}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">City *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Mumbai"
+                      value={checkoutForm.city}
+                      onChange={(e) => setCheckoutForm({ ...checkoutForm, city: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-black"
+                    />
+                    {formErrors.city && <p className="text-[10px] text-red-500 mt-1">{formErrors.city}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">Postal Pincode (6 digits) *</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      placeholder="e.g. 400001"
+                      value={checkoutForm.pincode}
+                      onChange={(e) => setCheckoutForm({ ...checkoutForm, pincode: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-black"
+                    />
+                    {formErrors.pincode && <p className="text-[10px] text-red-500 mt-1">{formErrors.pincode}</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">Order / Landmark Notes (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Leave with security / Ring bell twice"
+                    value={checkoutForm.notes}
+                    onChange={(e) => setCheckoutForm({ ...checkoutForm, notes: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-xs bg-white border border-gray-300 rounded-xl focus:outline-none focus:border-black"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-black">3. Payment Mode</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                      checkoutForm.paymentMethod === 'COD'
+                        ? 'border-black bg-white shadow-sm ring-2 ring-black'
+                        : 'border-gray-200 bg-white/60 hover:border-gray-400'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={checkoutForm.paymentMethod === 'COD'}
+                      onChange={() => setCheckoutForm({ ...checkoutForm, paymentMethod: 'COD' })}
+                      className="mt-0.5 accent-black"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-black">Cash on Delivery (COD)</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">Pay via Cash or Card on door arrival</p>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                      checkoutForm.paymentMethod === 'UPI'
+                        ? 'border-black bg-white shadow-sm ring-2 ring-black'
+                        : 'border-gray-200 bg-white/60 hover:border-gray-400'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      checked={checkoutForm.paymentMethod === 'UPI'}
+                      onChange={() => setCheckoutForm({ ...checkoutForm, paymentMethod: 'UPI' })}
+                      className="mt-0.5 accent-black"
+                    />
+                    <div>
+                      <p className="text-xs font-bold text-black">Instant UPI / QR</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">GPay, PhonePe, Paytm QR code on submit</p>
+                    </div>
+                  </label>
+                </div>
+
+                {checkoutForm.paymentMethod === 'UPI' && (
+                  <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-xl text-xs text-amber-900">
+                    <p className="font-semibold">UPI Payment Instructions:</p>
+                    <p className="mt-0.5 text-[11px]">
+                      Send <strong>₹{cartTotal.toLocaleString('en-IN')}</strong> to UPI ID: <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono font-bold">makeitup@upi</code> or scan the order confirmation screen QR.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-gray-200">
+                <button
+                  type="submit"
+                  disabled={isSubmittingOrder}
+                  className="w-full py-4 bg-[#111111] text-[#FAF7F0] hover:bg-[#E0A800] hover:text-black font-bold text-xs uppercase tracking-widest rounded-xl transition-all shadow-xl flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmittingOrder ? (
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="animate-spin" size={16} /> Transmitting Order...
+                    </span>
+                  ) : (
+                    <>
+                      <span>Place Order (₹{cartTotal.toLocaleString('en-IN')})</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
+                </button>
+                <p className="text-[11px] text-gray-500 text-center mt-2">
+                  Order details emailed automatically to <strong>{ORDER_TARGET_EMAIL}</strong> and saved to your device.
+                </p>
+              </div>
+
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. ORDER CONFIRMATION SCREEN */}
+      {/* ========================================================================= */}
+      {placedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setPlacedOrder(null)} />
+          <div className="relative w-full max-w-lg bg-[#FAF7F0] rounded-3xl shadow-2xl overflow-hidden border border-[#E8E2D5] z-10 max-h-[95vh] flex flex-col p-6 sm:p-8">
+            
+            <div className="text-center pb-6 border-b border-[#E8E2D5]">
+              <div className="w-14 h-14 bg-green-100 text-green-700 rounded-full flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 size={32} />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#E0A800]">Order Confirmed</span>
+              <h3 className="font-serif text-2xl font-black mt-1">Thank You, {placedOrder.customer.name}!</h3>
+              <p className="text-xs text-gray-600 mt-1">
+                Order ID: <strong className="text-black font-mono">{placedOrder.orderId}</strong>
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-6 space-y-4 text-xs">
+              <div className="bg-white p-4 rounded-2xl border border-[#E8E2D5] space-y-2">
+                <div className="flex justify-between font-bold text-gray-900 border-b border-gray-100 pb-2">
+                  <span>Purchased Pieces</span>
+                  <span>Amount</span>
+                </div>
+                {placedOrder.items.map((i, idx) => (
+                  <div key={idx} className="flex justify-between text-gray-600">
+                    <span>{i.product.name} ({i.selectedSize}) x {i.quantity}</span>
+                    <span className="font-semibold text-black">₹{(i.product.price * i.quantity).toLocaleString('en-IN')}</span>
+                  </div>
+                ))}
+                <div className="border-t border-gray-100 pt-2 flex justify-between font-bold text-black text-sm">
+                  <span>Total Paid</span>
+                  <span>₹{placedOrder.total.toLocaleString('en-IN')} ({placedOrder.customer.paymentMethod})</span>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-[#E8E2D5]">
+                <p className="font-bold text-black mb-1">Delivery Address</p>
+                <p className="text-gray-600 leading-relaxed">
+                  {placedOrder.customer.address}, {placedOrder.customer.city} - {placedOrder.customer.pincode}
+                </p>
+                <p className="text-gray-500 mt-1">Phone: {placedOrder.customer.phone}</p>
+              </div>
+
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 text-amber-900">
+                <p className="font-bold">Dispatch Notification Sent</p>
+                <p className="mt-1 text-[11px] leading-relaxed">
+                  Full details have been automatically emailed to <strong>{ORDER_TARGET_EMAIL}</strong> and customer email <strong>{placedOrder.customer.email}</strong>. Estimated delivery: {placedOrder.estimatedDelivery}.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-[#E8E2D5] flex gap-3">
+              <button
+                onClick={() => {
+                  setTrackedOrder(placedOrder);
+                  setTrackingInputId(placedOrder.orderId);
+                  setPlacedOrder(null);
+                  setIsTrackOrderOpen(true);
+                }}
+                className="flex-1 py-3 bg-[#E0A800] text-black rounded-xl font-bold text-xs uppercase tracking-wider text-center flex items-center justify-center gap-2 hover:bg-black hover:text-[#FAF7F0] transition-colors"
+              >
+                <Truck size={16} /> Track Order Now
+              </button>
+              <button
+                onClick={() => setPlacedOrder(null)}
+                className="px-6 py-3 bg-[#111111] text-[#FAF7F0] rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-black transition-colors"
+              >
+                Done
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
